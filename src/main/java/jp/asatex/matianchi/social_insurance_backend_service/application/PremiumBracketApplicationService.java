@@ -38,16 +38,29 @@ public class PremiumBracketApplicationService {
 
     /**
      * 将Domain DTO转换为Application DTO
+     * 采用流式编程风格进行转换
      * 
      * @param domainDto Domain层的DTO
      * @return Application层的DTO
      */
     private SocialInsuranceApplicationDto convertToApplicationDto(SocialInsuranceDomainDto domainDto) {
-        return new SocialInsuranceApplicationDto(
-                domainDto.getHealthCostWithNoCare(),
-                domainDto.getCareCost(),
-                domainDto.getPension()
+        // 转换雇员费用
+        SocialInsuranceDomainDto.CostDetail domainEmployeeCost = domainDto.getEmployeeCost();
+        SocialInsuranceApplicationDto.CostDetail applicationEmployeeCost = new SocialInsuranceApplicationDto.CostDetail(
+                domainEmployeeCost.getHealthCostWithNoCare(),
+                domainEmployeeCost.getCareCost(),
+                domainEmployeeCost.getPension()
         );
+        
+        // 转换雇主费用
+        SocialInsuranceDomainDto.CostDetail domainEmployerCost = domainDto.getEmployerCost();
+        SocialInsuranceApplicationDto.CostDetail applicationEmployerCost = new SocialInsuranceApplicationDto.CostDetail(
+                domainEmployerCost.getHealthCostWithNoCare(),
+                domainEmployerCost.getCareCost(),
+                domainEmployerCost.getPension()
+        );
+        
+        return new SocialInsuranceApplicationDto(applicationEmployeeCost, applicationEmployerCost);
     }
 }
 

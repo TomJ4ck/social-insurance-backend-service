@@ -44,16 +44,29 @@ public class PremiumBracketController {
 
     /**
      * 将Application DTO转换为Controller DTO
+     * 采用流式编程风格进行转换
      * 
      * @param applicationDto Application层的DTO
      * @return Controller层的DTO
      */
     private SocialInsuranceDto convertToControllerDto(SocialInsuranceApplicationDto applicationDto) {
-        return new SocialInsuranceDto(
-                applicationDto.getHealthCostWithNoCare(),
-                applicationDto.getCareCost(),
-                applicationDto.getPension()
+        // 转换雇员费用
+        SocialInsuranceApplicationDto.CostDetail applicationEmployeeCost = applicationDto.getEmployeeCost();
+        SocialInsuranceDto.CostDetail controllerEmployeeCost = new SocialInsuranceDto.CostDetail(
+                applicationEmployeeCost.getHealthCostWithNoCare(),
+                applicationEmployeeCost.getCareCost(),
+                applicationEmployeeCost.getPension()
         );
+        
+        // 转换雇主费用
+        SocialInsuranceApplicationDto.CostDetail applicationEmployerCost = applicationDto.getEmployerCost();
+        SocialInsuranceDto.CostDetail controllerEmployerCost = new SocialInsuranceDto.CostDetail(
+                applicationEmployerCost.getHealthCostWithNoCare(),
+                applicationEmployerCost.getCareCost(),
+                applicationEmployerCost.getPension()
+        );
+        
+        return new SocialInsuranceDto(controllerEmployeeCost, controllerEmployerCost);
     }
 }
 

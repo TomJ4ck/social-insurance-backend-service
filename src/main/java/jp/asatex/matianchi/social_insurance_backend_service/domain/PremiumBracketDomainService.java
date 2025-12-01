@@ -25,6 +25,7 @@ public class PremiumBracketDomainService {
     /**
      * 查询社会保险金额
      * 根据月薪和年龄计算社会保险费用
+     * 雇员和雇主各承担50%的费用
      * 
      * @param monthlySalary 月薪
      * @param age 年龄
@@ -33,23 +34,41 @@ public class PremiumBracketDomainService {
     public Mono<SocialInsuranceDomainDto> socialInsuranceQuery(Integer monthlySalary, Integer age) {
         return repository.findByAmount(monthlySalary)
                 .map(bracket -> {
+                    // 计算总费用
                     // 无介护健康保险金额
-                    BigDecimal healthCostWithNoCare = bracket.getHealthNoCare();
+                    BigDecimal totalHealthCostWithNoCare = bracket.getHealthNoCare();
                     
                     // 介护保险金额计算
-                    BigDecimal careCost;
+                    BigDecimal totalCareCost;
                     if (age < 40) {
                         // 年龄小于40岁，介护保险金额为0
-                        careCost = BigDecimal.ZERO;
+                        totalCareCost = BigDecimal.ZERO;
                     } else {
                         // 年龄大于等于40岁，介护保险金额 = 有介护健康保险金额 - 无介护健康保险金额
-                        careCost = bracket.getHealthCare().subtract(bracket.getHealthNoCare());
+                        totalCareCost = bracket.getHealthCare().subtract(bracket.getHealthNoCare());
                     }
                     
                     // 厚生年金金额
-                    BigDecimal pension = bracket.getPension();
+                    BigDecimal totalPension = bracket.getPension();
                     
-                    return new SocialInsuranceDomainDto(healthCostWithNoCare, careCost, pension);
+                    // 雇员和雇主各承担50%
+                    BigDecimal half = new BigDecimal("0.5");
+                    
+                    // 雇员承担的费用（50%）
+                    SocialInsuranceDomainDto.CostDetail employeeCost = new SocialInsuranceDomainDto.CostDetail(
+                            totalHealthCostWithNoCare.multiply(half),
+                            totalCareCost.multiply(half),
+                            totalPension.multiply(half)
+                    );
+                    
+                    // 雇主承担的费用（50%）
+                    SocialInsuranceDomainDto.CostDetail employerCost = new SocialInsuranceDomainDto.CostDetail(
+                            totalHealthCostWithNoCare.multiply(half),
+                            totalCareCost.multiply(half),
+                            totalPension.multiply(half)
+                    );
+                    
+                    return new SocialInsuranceDomainDto(employeeCost, employerCost);
                 })
                 .switchIfEmpty(Mono.error(new IllegalArgumentException(
                         "未找到月薪 " + monthlySalary + " 对应的保险费等级记录")));

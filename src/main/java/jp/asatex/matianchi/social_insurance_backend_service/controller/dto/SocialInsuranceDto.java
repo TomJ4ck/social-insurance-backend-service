@@ -6,58 +6,45 @@ import java.util.Objects;
 /**
  * 社会保险金额查询结果Controller DTO
  * 用于Controller层返回社会保险费用计算结果
+ * 包含雇员和雇主各自承担的费用（各50%）
  */
 public class SocialInsuranceDto {
 
     /**
-     * 无介护健康保险金额
+     * 雇员承担的费用
      */
-    private BigDecimal healthCostWithNoCare;
+    private CostDetail employeeCost;
 
     /**
-     * 介护保险金额
+     * 雇主承担的费用
      */
-    private BigDecimal careCost;
-
-    /**
-     * 厚生年金金额
-     */
-    private BigDecimal pension;
+    private CostDetail employerCost;
 
     // 默认构造函数
     public SocialInsuranceDto() {
     }
 
     // 全参构造函数
-    public SocialInsuranceDto(BigDecimal healthCostWithNoCare, BigDecimal careCost, BigDecimal pension) {
-        this.healthCostWithNoCare = healthCostWithNoCare;
-        this.careCost = careCost;
-        this.pension = pension;
+    public SocialInsuranceDto(CostDetail employeeCost, CostDetail employerCost) {
+        this.employeeCost = employeeCost;
+        this.employerCost = employerCost;
     }
 
     // Getter和Setter方法
-    public BigDecimal getHealthCostWithNoCare() {
-        return healthCostWithNoCare;
+    public CostDetail getEmployeeCost() {
+        return employeeCost;
     }
 
-    public void setHealthCostWithNoCare(BigDecimal healthCostWithNoCare) {
-        this.healthCostWithNoCare = healthCostWithNoCare;
+    public void setEmployeeCost(CostDetail employeeCost) {
+        this.employeeCost = employeeCost;
     }
 
-    public BigDecimal getCareCost() {
-        return careCost;
+    public CostDetail getEmployerCost() {
+        return employerCost;
     }
 
-    public void setCareCost(BigDecimal careCost) {
-        this.careCost = careCost;
-    }
-
-    public BigDecimal getPension() {
-        return pension;
-    }
-
-    public void setPension(BigDecimal pension) {
-        this.pension = pension;
+    public void setEmployerCost(CostDetail employerCost) {
+        this.employerCost = employerCost;
     }
 
     @Override
@@ -65,23 +52,102 @@ public class SocialInsuranceDto {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         SocialInsuranceDto that = (SocialInsuranceDto) o;
-        return Objects.equals(healthCostWithNoCare, that.healthCostWithNoCare) &&
-               Objects.equals(careCost, that.careCost) &&
-               Objects.equals(pension, that.pension);
+        return Objects.equals(employeeCost, that.employeeCost) &&
+               Objects.equals(employerCost, that.employerCost);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(healthCostWithNoCare, careCost, pension);
+        return Objects.hash(employeeCost, employerCost);
     }
 
     @Override
     public String toString() {
         return "SocialInsuranceDto{" +
-               "healthCostWithNoCare=" + healthCostWithNoCare +
-               ", careCost=" + careCost +
-               ", pension=" + pension +
+               "employeeCost=" + employeeCost +
+               ", employerCost=" + employerCost +
                '}';
+    }
+
+    /**
+     * 费用明细结构体
+     * 包含健康保险、介护保险、厚生年金的费用
+     */
+    public static class CostDetail {
+        /**
+         * 无介护健康保险金额
+         */
+        private BigDecimal healthCostWithNoCare;
+
+        /**
+         * 介护保险金额
+         */
+        private BigDecimal careCost;
+
+        /**
+         * 厚生年金金额
+         */
+        private BigDecimal pension;
+
+        // 默认构造函数
+        public CostDetail() {
+        }
+
+        // 全参构造函数
+        public CostDetail(BigDecimal healthCostWithNoCare, BigDecimal careCost, BigDecimal pension) {
+            this.healthCostWithNoCare = healthCostWithNoCare;
+            this.careCost = careCost;
+            this.pension = pension;
+        }
+
+        // Getter和Setter方法
+        public BigDecimal getHealthCostWithNoCare() {
+            return healthCostWithNoCare;
+        }
+
+        public void setHealthCostWithNoCare(BigDecimal healthCostWithNoCare) {
+            this.healthCostWithNoCare = healthCostWithNoCare;
+        }
+
+        public BigDecimal getCareCost() {
+            return careCost;
+        }
+
+        public void setCareCost(BigDecimal careCost) {
+            this.careCost = careCost;
+        }
+
+        public BigDecimal getPension() {
+            return pension;
+        }
+
+        public void setPension(BigDecimal pension) {
+            this.pension = pension;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CostDetail that = (CostDetail) o;
+            return Objects.equals(healthCostWithNoCare, that.healthCostWithNoCare) &&
+                   Objects.equals(careCost, that.careCost) &&
+                   Objects.equals(pension, that.pension);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(healthCostWithNoCare, careCost, pension);
+        }
+
+        @Override
+        public String toString() {
+            return "CostDetail{" +
+                   "healthCostWithNoCare=" + healthCostWithNoCare +
+                   ", careCost=" + careCost +
+                   ", pension=" + pension +
+                   '}';
+        }
     }
 }
 
