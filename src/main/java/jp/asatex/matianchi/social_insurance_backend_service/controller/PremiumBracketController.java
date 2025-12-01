@@ -55,7 +55,9 @@ public class PremiumBracketController {
         SocialInsuranceDto.CostDetail controllerEmployeeCost = new SocialInsuranceDto.CostDetail(
                 applicationEmployeeCost.getHealthCostWithNoCare(),
                 applicationEmployeeCost.getCareCost(),
-                applicationEmployeeCost.getPension()
+                applicationEmployeeCost.getPension(),
+                applicationEmployeeCost.getWithholdingTax(),
+                applicationEmployeeCost.getEmploymentInsurance()
         );
         
         // 转换雇主费用
@@ -63,7 +65,9 @@ public class PremiumBracketController {
         SocialInsuranceDto.CostDetail controllerEmployerCost = new SocialInsuranceDto.CostDetail(
                 applicationEmployerCost.getHealthCostWithNoCare(),
                 applicationEmployerCost.getCareCost(),
-                applicationEmployerCost.getPension()
+                applicationEmployerCost.getPension(),
+                applicationEmployerCost.getWithholdingTax(),
+                applicationEmployerCost.getEmploymentInsurance()
         );
         
         return new SocialInsuranceDto(controllerEmployeeCost, controllerEmployerCost);

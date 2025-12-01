@@ -71,7 +71,7 @@ public class SocialInsuranceDomainDto {
 
     /**
      * 费用明细结构体
-     * 包含健康保险、介护保险、厚生年金的费用
+     * 包含健康保险、介护保险、厚生年金、源泉征收税、雇佣保险的费用
      */
     public static class CostDetail {
         /**
@@ -89,15 +89,28 @@ public class SocialInsuranceDomainDto {
          */
         private BigDecimal pension;
 
+        /**
+         * 源泉征收税金额（仅雇员负担）
+         */
+        private BigDecimal withholdingTax;
+
+        /**
+         * 雇佣保险金额
+         */
+        private BigDecimal employmentInsurance;
+
         // 默认构造函数
         public CostDetail() {
         }
 
         // 全参构造函数
-        public CostDetail(BigDecimal healthCostWithNoCare, BigDecimal careCost, BigDecimal pension) {
+        public CostDetail(BigDecimal healthCostWithNoCare, BigDecimal careCost, BigDecimal pension, 
+                         BigDecimal withholdingTax, BigDecimal employmentInsurance) {
             this.healthCostWithNoCare = healthCostWithNoCare;
             this.careCost = careCost;
             this.pension = pension;
+            this.withholdingTax = withholdingTax;
+            this.employmentInsurance = employmentInsurance;
         }
 
         // Getter和Setter方法
@@ -125,6 +138,22 @@ public class SocialInsuranceDomainDto {
             this.pension = pension;
         }
 
+        public BigDecimal getWithholdingTax() {
+            return withholdingTax;
+        }
+
+        public void setWithholdingTax(BigDecimal withholdingTax) {
+            this.withholdingTax = withholdingTax;
+        }
+
+        public BigDecimal getEmploymentInsurance() {
+            return employmentInsurance;
+        }
+
+        public void setEmploymentInsurance(BigDecimal employmentInsurance) {
+            this.employmentInsurance = employmentInsurance;
+        }
+
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
@@ -132,12 +161,14 @@ public class SocialInsuranceDomainDto {
             CostDetail that = (CostDetail) o;
             return Objects.equals(healthCostWithNoCare, that.healthCostWithNoCare) &&
                    Objects.equals(careCost, that.careCost) &&
-                   Objects.equals(pension, that.pension);
+                   Objects.equals(pension, that.pension) &&
+                   Objects.equals(withholdingTax, that.withholdingTax) &&
+                   Objects.equals(employmentInsurance, that.employmentInsurance);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(healthCostWithNoCare, careCost, pension);
+            return Objects.hash(healthCostWithNoCare, careCost, pension, withholdingTax, employmentInsurance);
         }
 
         @Override
@@ -146,6 +177,8 @@ public class SocialInsuranceDomainDto {
                    "healthCostWithNoCare=" + healthCostWithNoCare +
                    ", careCost=" + careCost +
                    ", pension=" + pension +
+                   ", withholdingTax=" + withholdingTax +
+                   ", employmentInsurance=" + employmentInsurance +
                    '}';
         }
     }

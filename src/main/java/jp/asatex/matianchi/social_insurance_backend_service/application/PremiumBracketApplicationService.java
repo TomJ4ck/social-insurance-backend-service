@@ -49,7 +49,9 @@ public class PremiumBracketApplicationService {
         SocialInsuranceApplicationDto.CostDetail applicationEmployeeCost = new SocialInsuranceApplicationDto.CostDetail(
                 domainEmployeeCost.getHealthCostWithNoCare(),
                 domainEmployeeCost.getCareCost(),
-                domainEmployeeCost.getPension()
+                domainEmployeeCost.getPension(),
+                domainEmployeeCost.getWithholdingTax(),
+                domainEmployeeCost.getEmploymentInsurance()
         );
         
         // 转换雇主费用
@@ -57,7 +59,9 @@ public class PremiumBracketApplicationService {
         SocialInsuranceApplicationDto.CostDetail applicationEmployerCost = new SocialInsuranceApplicationDto.CostDetail(
                 domainEmployerCost.getHealthCostWithNoCare(),
                 domainEmployerCost.getCareCost(),
-                domainEmployerCost.getPension()
+                domainEmployerCost.getPension(),
+                domainEmployerCost.getWithholdingTax(),
+                domainEmployerCost.getEmploymentInsurance()
         );
         
         return new SocialInsuranceApplicationDto(applicationEmployeeCost, applicationEmployerCost);

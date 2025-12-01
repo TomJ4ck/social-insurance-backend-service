@@ -1,13 +1,18 @@
 package jp.asatex.matianchi.social_insurance_backend_service.domain;
 
 import jp.asatex.matianchi.social_insurance_backend_service.domain.dto.SocialInsuranceDomainDto;
+import jp.asatex.matianchi.social_insurance_backend_service.entity.EmploymentInsuranceRate;
 import jp.asatex.matianchi.social_insurance_backend_service.entity.PremiumBracket;
+import jp.asatex.matianchi.social_insurance_backend_service.entity.WithholdingTaxBracket;
+import jp.asatex.matianchi.social_insurance_backend_service.repository.EmploymentInsuranceRateRepository;
 import jp.asatex.matianchi.social_insurance_backend_service.repository.PremiumBracketRepository;
+import jp.asatex.matianchi.social_insurance_backend_service.repository.WithholdingTaxBracketRepository;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * 保险费等级Domain Service
@@ -17,23 +22,67 @@ import java.math.BigDecimal;
 public class PremiumBracketDomainService {
 
     private final PremiumBracketRepository repository;
+    private final WithholdingTaxBracketRepository withholdingTaxRepository;
+    private final EmploymentInsuranceRateRepository employmentInsuranceRepository;
 
-    public PremiumBracketDomainService(PremiumBracketRepository repository) {
+    public PremiumBracketDomainService(
+            PremiumBracketRepository repository,
+            WithholdingTaxBracketRepository withholdingTaxRepository,
+            EmploymentInsuranceRateRepository employmentInsuranceRepository) {
         this.repository = repository;
+        this.withholdingTaxRepository = withholdingTaxRepository;
+        this.employmentInsuranceRepository = employmentInsuranceRepository;
     }
 
     /**
      * 查询社会保险金额
      * 根据月薪和年龄计算社会保险费用
      * 雇员和雇主各承担50%的费用
+     * 包含健康保险、介护保险、厚生年金、源泉征收税、雇佣保险
      * 
      * @param monthlySalary 月薪
      * @param age 年龄
+     * @param businessType 事业类型（可选，默认为"一般の事業"）
      * @return Mono包装的SocialInsuranceDomainDto对象
      */
-    public Mono<SocialInsuranceDomainDto> socialInsuranceQuery(Integer monthlySalary, Integer age) {
-        return repository.findByAmount(monthlySalary)
+    public Mono<SocialInsuranceDomainDto> socialInsuranceQuery(Integer monthlySalary, Integer age, String businessType) {
+        // 默认使用"一般の事業"
+        String finalBusinessType = (businessType != null && !businessType.isEmpty()) 
+                ? businessType 
+                : "一般の事業";
+        
+        // 查询社会保险费等级
+        Mono<PremiumBracket> bracketMono = repository.findByAmount(monthlySalary)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                        "未找到月薪 " + monthlySalary + " 对应的保险费等级记录")));
+        
+        // 计算扣除社会保险费后的工资金额（用于源泉征收税计算）
+        Mono<Integer> salaryAfterSocialInsuranceMono = bracketMono
                 .map(bracket -> {
+                    // 扣除社会保险费后的工资金额 = 月薪 - 健康保险 - 厚生年金
+                    BigDecimal totalSocialInsurance = bracket.getHealthNoCare().add(bracket.getPension());
+                    return monthlySalary - totalSocialInsurance.intValue();
+                });
+        
+        // 查询源泉征收税等级
+        Mono<WithholdingTaxBracket> withholdingTaxMono = salaryAfterSocialInsuranceMono
+                .flatMap(salaryAfter -> withholdingTaxRepository.findByAmount(salaryAfter))
+                .defaultIfEmpty(new WithholdingTaxBracket()); // 如果找不到，返回空对象
+        
+        // 查询雇佣保险费率
+        Mono<EmploymentInsuranceRate> employmentInsuranceMono = employmentInsuranceRepository
+                .findByBusinessType(finalBusinessType)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                        "未找到事业类型 " + finalBusinessType + " 对应的雇佣保险费率记录")));
+        
+        // 组合所有查询结果
+        return Mono.zip(bracketMono, withholdingTaxMono, employmentInsuranceMono, salaryAfterSocialInsuranceMono)
+                .map(tuple -> {
+                    PremiumBracket bracket = tuple.getT1();
+                    WithholdingTaxBracket withholdingTaxBracket = tuple.getT2();
+                    EmploymentInsuranceRate employmentInsuranceRate = tuple.getT3();
+                    Integer salaryAfterSocialInsurance = tuple.getT4();
+                    
                     // 计算总费用
                     // 无介护健康保险金额
                     BigDecimal totalHealthCostWithNoCare = bracket.getHealthNoCare();
@@ -51,27 +100,57 @@ public class PremiumBracketDomainService {
                     // 厚生年金金额
                     BigDecimal totalPension = bracket.getPension();
                     
-                    // 雇员和雇主各承担50%
+                    // 源泉征收税金额（仅雇员负担，使用甲类税额）
+                    BigDecimal withholdingTax = withholdingTaxBracket.getTaxAmountKo() != null
+                            ? new BigDecimal(withholdingTaxBracket.getTaxAmountKo())
+                            : BigDecimal.ZERO;
+                    
+                    // 雇佣保险金额计算
+                    // 雇员负担 = 月薪 × 雇员费率 / 1000
+                    BigDecimal employeeEmploymentInsurance = new BigDecimal(monthlySalary)
+                            .multiply(employmentInsuranceRate.getEmployeeRate())
+                            .divide(new BigDecimal("1000"), 2, RoundingMode.HALF_UP);
+                    
+                    // 雇主负担 = 月薪 × (失業等給付率 + 雇用保険二事業率) / 1000
+                    BigDecimal employerEmploymentInsurance = new BigDecimal(monthlySalary)
+                            .multiply(employmentInsuranceRate.getEmployerUnemploymentRate()
+                                    .add(employmentInsuranceRate.getEmployerTwoUndertakingsRate()))
+                            .divide(new BigDecimal("1000"), 2, RoundingMode.HALF_UP);
+                    
+                    // 雇员和雇主各承担50%的社会保险费
                     BigDecimal half = new BigDecimal("0.5");
                     
-                    // 雇员承担的费用（50%）
+                    // 雇员承担的费用（50%的社会保险 + 源泉征收税 + 雇佣保险）
                     SocialInsuranceDomainDto.CostDetail employeeCost = new SocialInsuranceDomainDto.CostDetail(
                             totalHealthCostWithNoCare.multiply(half),
                             totalCareCost.multiply(half),
-                            totalPension.multiply(half)
+                            totalPension.multiply(half),
+                            withholdingTax, // 源泉征收税仅雇员负担
+                            employeeEmploymentInsurance // 雇员负担的雇佣保险
                     );
                     
-                    // 雇主承担的费用（50%）
+                    // 雇主承担的费用（50%的社会保险 + 雇佣保险）
                     SocialInsuranceDomainDto.CostDetail employerCost = new SocialInsuranceDomainDto.CostDetail(
                             totalHealthCostWithNoCare.multiply(half),
                             totalCareCost.multiply(half),
-                            totalPension.multiply(half)
+                            totalPension.multiply(half),
+                            BigDecimal.ZERO, // 雇主不负担源泉征收税
+                            employerEmploymentInsurance // 雇主负担的雇佣保险
                     );
                     
                     return new SocialInsuranceDomainDto(employeeCost, employerCost);
-                })
-                .switchIfEmpty(Mono.error(new IllegalArgumentException(
-                        "未找到月薪 " + monthlySalary + " 对应的保险费等级记录")));
+                });
+    }
+    
+    /**
+     * 查询社会保险金额（重载方法，使用默认事业类型）
+     * 
+     * @param monthlySalary 月薪
+     * @param age 年龄
+     * @return Mono包装的SocialInsuranceDomainDto对象
+     */
+    public Mono<SocialInsuranceDomainDto> socialInsuranceQuery(Integer monthlySalary, Integer age) {
+        return socialInsuranceQuery(monthlySalary, age, null);
     }
 
     /**
