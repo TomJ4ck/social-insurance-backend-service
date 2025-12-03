@@ -57,17 +57,30 @@ public class PremiumBracketDomainService {
                         "未找到月薪 " + monthlySalary + " 对应的保险费等级记录")));
         
         // 计算扣除社会保险费后的工资金额（用于源泉征收税计算）
+        // 注意：源泉征收税应该基于扣除雇员承担的社会保险费后的工资金额
         Mono<Integer> salaryAfterSocialInsuranceMono = bracketMono
                 .map(bracket -> {
-                    // 扣除社会保险费后的工资金额 = 月薪 - 健康保险 - 厚生年金
-                    BigDecimal totalSocialInsurance = bracket.getHealthNoCare().add(bracket.getPension());
-                    return monthlySalary - totalSocialInsurance.intValue();
+                    // 计算总的社会保险费（健康保险 + 介护保险 + 厚生年金）
+                    BigDecimal totalHealthCostWithNoCare = bracket.getHealthNoCare();
+                    BigDecimal totalCareCost = (age < 40) ? BigDecimal.ZERO : bracket.getHealthCare().subtract(bracket.getHealthNoCare());
+                    BigDecimal totalPension = bracket.getPension();
+                    
+                    // 雇员承担的社会保险费（总额的50%）
+                    BigDecimal half = new BigDecimal("0.5");
+                    BigDecimal employeeHealthCost = totalHealthCostWithNoCare.multiply(half);
+                    BigDecimal employeeCareCost = totalCareCost.multiply(half);
+                    BigDecimal employeePension = totalPension.multiply(half);
+                    
+                    // 扣除社会保险费后的工资金额 = 月薪 - 雇员承担的健康保险 - 雇员承担的介护保险 - 雇员承担的厚生年金
+                    BigDecimal employeeSocialInsurance = employeeHealthCost.add(employeeCareCost).add(employeePension);
+                    return monthlySalary - employeeSocialInsurance.intValue();
                 });
         
         // 查询源泉征收税等级
         Mono<WithholdingTaxBracket> withholdingTaxMono = salaryAfterSocialInsuranceMono
-                .flatMap(salaryAfter -> withholdingTaxRepository.findByAmount(salaryAfter))
-                .defaultIfEmpty(new WithholdingTaxBracket()); // 如果找不到，返回空对象
+                .flatMap(salaryAfter -> withholdingTaxRepository.findByAmount(salaryAfter)
+                        .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                                "未找到扣除社会保险费后工资金额 " + salaryAfter + " 对应的源泉征收税等级记录"))));
         
         // 查询雇佣保险费率
         Mono<EmploymentInsuranceRate> employmentInsuranceMono = employmentInsuranceRepository
