@@ -1,5 +1,10 @@
 package jp.asatex.matianchi.social_insurance_backend_service.domain;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+import org.springframework.stereotype.Service;
+
 import jp.asatex.matianchi.social_insurance_backend_service.domain.dto.SocialInsuranceDomainDto;
 import jp.asatex.matianchi.social_insurance_backend_service.entity.EmploymentInsuranceRate;
 import jp.asatex.matianchi.social_insurance_backend_service.entity.PremiumBracket;
@@ -7,12 +12,8 @@ import jp.asatex.matianchi.social_insurance_backend_service.entity.WithholdingTa
 import jp.asatex.matianchi.social_insurance_backend_service.repository.EmploymentInsuranceRateRepository;
 import jp.asatex.matianchi.social_insurance_backend_service.repository.PremiumBracketRepository;
 import jp.asatex.matianchi.social_insurance_backend_service.repository.WithholdingTaxBracketRepository;
-import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 
 /**
  * 保险费等级Domain Service
@@ -56,10 +57,19 @@ public class PremiumBracketDomainService {
                 .switchIfEmpty(Mono.error(new IllegalArgumentException(
                         "未找到月薪 " + monthlySalary + " 对应的保险费等级记录")));
         
-        // 计算扣除社会保险费后的工资金额（用于源泉征收税计算）
-        // 注意：源泉征收税应该基于扣除雇员承担的社会保险费后的工资金额
-        Mono<Integer> salaryAfterSocialInsuranceMono = bracketMono
-                .map(bracket -> {
+        // 查询雇佣保险费率
+        Mono<EmploymentInsuranceRate> employmentInsuranceMono = employmentInsuranceRepository
+                .findByBusinessType(finalBusinessType)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                        "未找到事业类型 " + finalBusinessType + " 对应的雇佣保险费率记录")));
+        
+        // 计算扣除社会保险费和雇佣保险后的工资金额（用于源泉征收税计算）
+        // 注意：源泉征收税应该基于扣除雇员承担的社会保险费和雇佣保险后的工资金额
+        Mono<Integer> salaryAfterSocialInsuranceMono = Mono.zip(bracketMono, employmentInsuranceMono)
+                .map(tuple -> {
+                    PremiumBracket bracket = tuple.getT1();
+                    EmploymentInsuranceRate employmentInsuranceRate = tuple.getT2();
+                    
                     // 计算总的社会保险费（健康保险 + 介护保险 + 厚生年金）
                     BigDecimal totalHealthCostWithNoCare = bracket.getHealthNoCare();
                     BigDecimal totalCareCost = (age < 40) ? BigDecimal.ZERO : bracket.getHealthCare().subtract(bracket.getHealthNoCare());
@@ -71,30 +81,29 @@ public class PremiumBracketDomainService {
                     BigDecimal employeeCareCost = totalCareCost.multiply(half);
                     BigDecimal employeePension = totalPension.multiply(half);
                     
-                    // 扣除社会保险费后的工资金额 = 月薪 - 雇员承担的健康保险 - 雇员承担的介护保险 - 雇员承担的厚生年金
+                    // 雇员承担的雇佣保险 = 月薪 × 雇员费率 / 1000
+                    BigDecimal employeeEmploymentInsurance = new BigDecimal(monthlySalary)
+                            .multiply(employmentInsuranceRate.getEmployeeRate())
+                            .divide(new BigDecimal("1000"), 2, RoundingMode.HALF_UP);
+                    
+                    // 扣除总额 = 月薪 - 雇员承担的健康保险 - 雇员承担的介护保险 - 雇员承担的厚生年金 - 雇员承担的雇佣保险
                     BigDecimal employeeSocialInsurance = employeeHealthCost.add(employeeCareCost).add(employeePension);
-                    return monthlySalary - employeeSocialInsurance.intValue();
+                    BigDecimal totalDeduction = employeeSocialInsurance.add(employeeEmploymentInsurance);
+                    return monthlySalary - totalDeduction.intValue();
                 });
         
         // 查询源泉征收税等级
         Mono<WithholdingTaxBracket> withholdingTaxMono = salaryAfterSocialInsuranceMono
                 .flatMap(salaryAfter -> withholdingTaxRepository.findByAmount(salaryAfter)
                         .switchIfEmpty(Mono.error(new IllegalArgumentException(
-                                "未找到扣除社会保险费后工资金额 " + salaryAfter + " 对应的源泉征收税等级记录"))));
-        
-        // 查询雇佣保险费率
-        Mono<EmploymentInsuranceRate> employmentInsuranceMono = employmentInsuranceRepository
-                .findByBusinessType(finalBusinessType)
-                .switchIfEmpty(Mono.error(new IllegalArgumentException(
-                        "未找到事业类型 " + finalBusinessType + " 对应的雇佣保险费率记录")));
+                                "未找到扣除社会保险费和雇佣保险后工资金额 " + salaryAfter + " 对应的源泉征收税等级记录"))));
         
         // 组合所有查询结果
-        return Mono.zip(bracketMono, withholdingTaxMono, employmentInsuranceMono, salaryAfterSocialInsuranceMono)
+        return Mono.zip(bracketMono, withholdingTaxMono, employmentInsuranceMono)
                 .map(tuple -> {
                     PremiumBracket bracket = tuple.getT1();
                     WithholdingTaxBracket withholdingTaxBracket = tuple.getT2();
                     EmploymentInsuranceRate employmentInsuranceRate = tuple.getT3();
-                    Integer salaryAfterSocialInsurance = tuple.getT4();
                     
                     // 计算总费用
                     // 无介护健康保险金额
